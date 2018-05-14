@@ -69,7 +69,7 @@ int FTPClient::listPwd() {
 		ret = recv(m_dataSocket, m_databuff, DATABUFFLEN - 1, 0);
 	}
 	
-	removeSpace(fulllist);
+	//removeSpace(fulllist);
 
 	int lastp, lastq, p, q;
 	vector<string> eachrow;
@@ -99,7 +99,8 @@ int FTPClient::listPwd() {
 	}
 	for (auto const& dir : filelist) {
 		for (auto const& temp : dir)
-			cout << temp << endl;
+			cout << temp << " ";
+		cout << endl;
 	}
 	closesocket(m_dataSocket);
 	recvControl(226);
@@ -132,22 +133,28 @@ int FTPClient::convertPasv() {
 }
 
 int FTPClient::recvControl(int stateCode, string errorInfo) {
+	Sleep(300);
 	if (m_nextInfo.size() == 0) {
 		int code;
 		Sleep(50);
 		memset(m_buff, 0, BUFFLEN);
 		m_recvInfo.clear();
 		int infolen = recv(m_controlSocket, m_buff, BUFFLEN, 0);
+
+		if (infolen == -1) {
+			cout << "Not connected." << endl;
+			return -1;
+		}
+
 		if (infolen == BUFFLEN) {
 			cout << "ERROR! Too long information to receive!" << endl;
-			
 			return -1;
 		}
 		m_buff[infolen] = '\0';
 		// get the code 
 		code = getStateCode();
 		m_recvInfo = m_buff;
-		cout << m_recvInfo << endl;
+		cout << m_recvInfo;
 
 		int temp = m_recvInfo.find("\r\n226");
 		
@@ -158,7 +165,7 @@ int FTPClient::recvControl(int stateCode, string errorInfo) {
 		if (code == stateCode)
 			return 0;
 		else {
-			cout << errorInfo << endl;
+			cout << errorInfo;
 			return -1;
 		}
 	}
@@ -172,7 +179,7 @@ int FTPClient::recvControl(int stateCode, string errorInfo) {
 int FTPClient::commandLine(string cmd) {
 	cmd += "\r\n";
 	int cmdlen = cmd.size();
-	cout << cmd;
+	//cout << cmd;
 	send(m_controlSocket, cmd.c_str(), cmdlen, 0);
 	return 0;
 }
@@ -232,15 +239,8 @@ int FTPClient::ConnectServer(int portConnect) {
 	cout << "Control Socket Connecting Succeeded. " << endl;
 
 	// Receive return status information
-	Sleep(300);
 	recvControl(220);
 
-	// Username
-	commandLine("USER " + m_Username);
-	recvControl(331);
-	// Password
-	commandLine("PASS " + m_Password);
-	recvControl(230);
 	return 0;
 }
 
@@ -258,25 +258,68 @@ int FTPClient::DisconnectServer() {
 
 }
 
-void FTPClient::Login() {
-	string user, pass, ip;
-	cout << "IP Address: ";
-	getline(cin, ip);
+int FTPClient::Login(const vector<string>& cmd) {
+	// Get IP
+	string ip;
+
+	if (cmd.size() > 1) {
+		ip = cmd[1];
+	}
+	else {
+		cout << "To ";
+		getline(cin, ip);
+	}
+	if (ip == "localhost")
+		ip = "127.0.0.1";
+	this->m_IPAddr = ip;
+
+	if (ConnectServer(PORT) == -1) {
+		return -1;
+	}
+
+	// Get Username
+	string username;
 	cout << "Username: ";
-	getline(cin, user);
+	getline(cin, username);
+	user(username);
+
+	return 0;
+}
+
+int FTPClient::user(string user) {
+	this->m_Username = user;
+	commandLine("USER " + m_Username);
+	if (recvControl(331) == -1) {
+		cout << "Login failed." << endl;
+		return -1;
+	}
+
+	string password;
 	cout << "Password: ";
 	char ch;
 	ch = _getch();
 	while (ch != 13) {
-		pass.push_back(ch);
-		cout << '*';
+		if (ch != 8) {
+			password.push_back(ch);
+		}
+		else {
+			if (password.size() > 0) 
+				password.pop_back();
+		}
 		ch = _getch();
 	}
 	cout << endl;
-	this->m_IPAddr = ip;
-	this->m_Username = user;
-	this->m_Password = pass;
+	pass(password);
 }
+
+int FTPClient::pass(string pass) {
+	this->m_Password = pass;
+	commandLine("PASS " + m_Password);
+	if (recvControl(230) == -1) {
+		return -1;
+	}
+}
+
 /*
 --This function to navigate to a different directory on server
 */
@@ -295,7 +338,7 @@ void FTPClient::ls() {
 
 void FTPClient::pwdDir() {
 	commandLine("PWD ");
-	recvControl(226);
+	recvControl(257);
 }
 /*
 -- This function to upload file to server
@@ -310,15 +353,17 @@ void FTPClient::put() {
 	getline(cin, localName);
 	FILE *file = fopen(localName.c_str(), "rb");
 	if (!file) {
-		cout << "Opening File Failed! \n";
+		cout << "File not found! \n";
+		return;
 	}
+
 	string localFileName;
 	// Find last "/"
 	int temp = localName.find_last_of("/");
 	// To get name of file that is sent to server
 	localFileName = localName.substr(temp + 1);
 	// Convert to passive mode
-	//convertPasv();
+	// convertPasv();
 	commandLine("STOR " + localFileName);
 	recvControl(150);
 	int count;

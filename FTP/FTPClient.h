@@ -1,5 +1,8 @@
 #pragma once
 
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <WinSock2.h>
 #include <iostream>
 #include <fstream>
@@ -30,13 +33,16 @@ private:
 	string m_recvInfo;
 	string m_nextInfo;
 	bool m_passiveMode; // to check passive mode or not
+	bool m_connected; // check connected to server or not
+	bool m_login; // check login completed or not
+	string m_localDir = "/";
 	
 	int getStateCode();
 	int getPort();
 	void getFileSize(string filename);
 	int listPwd();
 	
-	int recvControl(int stateCode, string errorInfo = "0");
+	int recvControl(int stateCode, string errorInfo = "");
 	int commandLine(std::string cmd);
 	void removeSpace(std::string&);
 public:
@@ -44,7 +50,9 @@ public:
 	~FTPClient();
 	int ConnectServer(int portConnect);
 	int DisconnectServer();
-	void Login();
+	int Login(const vector<string>&);
+	int user(string);
+	int pass(string);
 	void ls(); // list the list of folder, file on server
 	void cd(); // change dir
 	int convertPasv();
