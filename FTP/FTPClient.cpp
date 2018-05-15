@@ -42,8 +42,13 @@ int FTPClient::getPort() {
 }
 
 void FTPClient::getFileSize(string filename) {
-	commandLine("SIZE " + filename);
-	recvControl(213);
+	try {
+		commandLine("SIZE " + filename);
+		recvControl(213);
+	}
+	catch (string error) {
+		throw error;
+	}
 	char *temp = m_buff;
 	while (temp != nullptr && *temp != ' ')
 		temp++;
@@ -57,81 +62,6 @@ void FTPClient::getFileSize(string filename) {
 	memset(m_buff, 0, BUFFLEN);
 }
 
-int FTPClient::listPwd() {
-	commandLine("LIST -al");
-	recvControl(150);
-	memset(m_databuff, 0, DATABUFFLEN);
-	string fulllist;
-	int ret = recv(m_dataSocket, m_databuff, DATABUFFLEN - 1, 0);
-	while (ret > 0) {
-		m_databuff[ret] = '\0';
-		fulllist += m_databuff;
-		ret = recv(m_dataSocket, m_databuff, DATABUFFLEN - 1, 0);
-	}
-	
-	//removeSpace(fulllist);
-
-	int lastp, lastq, p, q;
-	vector<string> eachrow;
-	string rawrow;
-	string item;
-	filelist.clear();
-	p = fulllist.find("\r\n");
-	lastp = 0;
-	while (p >= 0) {
-		eachrow.clear();
-		rawrow = fulllist.substr(lastp, p - lastp);
-
-		q = rawrow.find(' ');
-		lastq = 0;
-		for (int i = 0; i < 8; i++) {
-			item = rawrow.substr(lastq, q - lastq);
-			eachrow.push_back(item);
-			lastq = q + 1;
-			q = rawrow.find(' ', lastq);
-		}
-		item = rawrow.substr(lastq);
-		eachrow.push_back(item);
-		filelist.push_back(eachrow);
-
-		lastp = p + 2;
-		p = fulllist.find("\r\n", lastp);
-	}
-	for (auto const& dir : filelist) {
-		for (auto const& temp : dir)
-			cout << temp << " ";
-		cout << endl;
-	}
-	closesocket(m_dataSocket);
-	recvControl(226);
-	return 0;
-}
-
-int FTPClient::convertPasv() {
-	int dataPort, ret;
-	// Chuyển sang PASSIVE
-	commandLine("PASV");
-	recvControl(227);
-	// 227 Entering Passive Mode (h1, h2, h3, h4, p1, p2)
-	// h1, h2, h3, h4 is host address (Ex: 127.0.0.1)
-	// p1 * 256 + p2 is data port
-	// so, value mode is (127, 0, 0, 1, p1, p2)
-	dataPort = getPort(); 
-	
-	// Create a connection in passive mode	
-	m_dataSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	m_serverAddr.sin_port = htons(dataPort); // Change the port value in connection parameters
-	ret = connect(m_dataSocket, (sockaddr*)&m_serverAddr, sizeof(m_serverAddr));
-	
-	if (ret == SOCKET_ERROR) {
-		cout << "Connecting In Passive Mode Failed: " << GetLastError() << endl;
-		return -1;
-	}
-	cout << "Connecting In Passive Mode Successed." << endl;
-	m_passiveMode = true;
-	return 0;
-}
-
 int FTPClient::recvControl(int stateCode, string errorInfo) {
 	Sleep(300);
 	if (m_nextInfo.size() == 0) {
@@ -142,14 +72,14 @@ int FTPClient::recvControl(int stateCode, string errorInfo) {
 		int infolen = recv(m_controlSocket, m_buff, BUFFLEN, 0);
 
 		if (infolen == -1) {
-			cout << "Not connected." << endl;
+			throw string("Not connected.");
+			return -1;
+		}
+		else if (infolen == BUFFLEN) {
+			throw string("ERROR! Too long information to receive!");
 			return -1;
 		}
 
-		if (infolen == BUFFLEN) {
-			cout << "ERROR! Too long information to receive!" << endl;
-			return -1;
-		}
 		m_buff[infolen] = '\0';
 		// get the code 
 		code = getStateCode();
@@ -165,7 +95,8 @@ int FTPClient::recvControl(int stateCode, string errorInfo) {
 		if (code == stateCode)
 			return 0;
 		else {
-			cout << errorInfo;
+			if (code >= 500 && code <= 599)
+				throw - 1;
 			return -1;
 		}
 	}
@@ -209,15 +140,15 @@ int FTPClient::ConnectServer(int portConnect) {
 	// initializate socket
 	// Use version socket: 2.2
 	if (WSAStartup(MAKEWORD(2, 2), &startup) != 0) {
-		cout << "Init Failed: " << GetLastError() << endl;
-		system("pause");
+		throw string("Init Failed: ") + to_string(GetLastError());
+		//system("pause");
 		return -1;
 	}
 	// Create Socket
 	m_controlSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (m_controlSocket == INVALID_SOCKET) {
-		cout << "Creating Control Socket Failed. " << GetLastError() << endl;
-		system("pause");
+		throw string("Creating Control Socket Failed. ") + to_string(GetLastError());
+		//system("pause");
 		return -1;
 	}
 	// Build server access parameter structure
@@ -232,7 +163,7 @@ int FTPClient::ConnectServer(int portConnect) {
 	// Create a connection ...
 	connection = connect(m_controlSocket, (sockaddr*)&m_serverAddr, sizeof(m_serverAddr));
 	if (connection == SOCKET_ERROR) {
-		cout << "Control Socket Connecting Failed. " << GetLastError() << endl;
+		throw string("Control Socket Connecting Failed. ") + to_string(GetLastError());
 		//system("pause");
 		return -1;
 	}
@@ -245,36 +176,61 @@ int FTPClient::ConnectServer(int portConnect) {
 }
 
 int FTPClient::DisconnectServer() {
-	commandLine("QUIT");
-	recvControl(221);
-	m_IPAddr, m_Username, m_Password, m_Info = "";
-	filelist.clear();
-	memset(m_buff, 0, BUFFLEN);
-	memset(m_databuff, 0, DATABUFFLEN);
-	closesocket(m_dataSocket);
-	closesocket(m_controlSocket);
-	WSACleanup();
+	try {
+		commandLine("QUIT");
+		recvControl(221);
+	}
+	catch (string error) {
+		if (error != "Not connected.") {
+			m_IPAddr = m_Username = m_Password = m_Info = "";
+			filelist.clear();
+			memset(m_buff, 0, BUFFLEN);
+			memset(m_databuff, 0, DATABUFFLEN);
+			closesocket(m_dataSocket);
+			closesocket(m_controlSocket);
+			WSACleanup();
+			throw error;
+		}
+	}
 	return 0;
 
 }
 
-int FTPClient::Login(const vector<string>& cmd) {
-	// Get IP
-	string ip;
+//  --------------------
+// | Supported Commands |
+//  --------------------
 
-	if (cmd.size() > 1) {
-		ip = cmd[1];
+// --- open: connect and login to server
+int FTPClient::openUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: open IP_address");
 	}
 	else {
-		cout << "To ";
-		getline(cin, ip);
-	}
-	if (ip == "localhost")
-		ip = "127.0.0.1";
-	this->m_IPAddr = ip;
+		string ip;
+		if (cmd.size() > 1) {
+			ip = cmd[1];
+		}
+		else {
+			cout << "To ";
+			getline(cin, ip);
+		}
+		if (ip == "localhost")
+			ip = "127.0.0.1";
+		this->m_IPAddr = ip;
 
+		try {
+			open(ip);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+	return 0;
+}
+
+int FTPClient::open(string ip) {
 	if (ConnectServer(PORT) == -1) {
-		return -1;
+		throw string("Cannot connect to server.");
 	}
 
 	// Get Username
@@ -286,11 +242,28 @@ int FTPClient::Login(const vector<string>& cmd) {
 	return 0;
 }
 
+// --- user: input username
+int FTPClient::userUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		cout << "Usage: user username" << endl;
+	}
+	else {
+		string username = (cmd.size() == 2) ? cmd[1] : "";
+		try {
+			user(username);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+	return 0;
+}
+
 int FTPClient::user(string user) {
 	this->m_Username = user;
 	commandLine("USER " + m_Username);
 	if (recvControl(331) == -1) {
-		cout << "Login failed." << endl;
+		throw string("Login failed.");
 		return -1;
 	}
 
@@ -309,37 +282,171 @@ int FTPClient::user(string user) {
 		ch = _getch();
 	}
 	cout << endl;
-	pass(password);
+	try {
+		pass(password);
+	}
+	catch (string error) {
+		throw error;
+	}
+}
+
+// --- pass: input password
+int FTPClient::passUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		cout << "Usage: pass password" << endl;
+	}
+	else {
+		string password = (cmd.size() == 2) ? cmd[1] : "";
+		try {
+			pass(password);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+	return 0;
 }
 
 int FTPClient::pass(string pass) {
 	this->m_Password = pass;
 	commandLine("PASS " + m_Password);
 	if (recvControl(230) == -1) {
+		throw string("Login failed.");
 		return -1;
+	}
+	return 0;
+}
+
+// --- ls: list the files/folders of the current directory
+int FTPClient::lsUtil(const Command& cmd) {
+	if (cmd.size() > 1) {
+		throw "Invalid command. Usage: ls";
+	}
+	else {
+		try {
+			ls();
+		}
+		catch (string error) {
+			throw error;
+		}
 	}
 }
 
-/*
---This function to navigate to a different directory on server
-*/
-void FTPClient::cd() {
-	string dir;
-	cout << "Directory? ";
-	getline(cin, dir);
-	memset(m_buff, 0, BUFFLEN);
-	commandLine("CWD " + dir);
-	recvControl(250);
+int FTPClient::ls() {
+	try {
+		pasv();
+		commandLine("LIST -al");
+		recvControl(150);
+		memset(m_databuff, 0, DATABUFFLEN);
+		string fulllist;
+		int ret = recv(m_dataSocket, m_databuff, DATABUFFLEN - 1, 0);
+		while (ret > 0) {
+			m_databuff[ret] = '\0';
+			fulllist += m_databuff;
+			ret = recv(m_dataSocket, m_databuff, DATABUFFLEN - 1, 0);
+		}
+
+		//removeSpace(fulllist);
+
+		int lastp, lastq, p, q;
+		vector<string> eachrow;
+		string rawrow;
+		string item;
+		filelist.clear();
+		p = fulllist.find("\r\n");
+		lastp = 0;
+		while (p >= 0) {
+			eachrow.clear();
+			rawrow = fulllist.substr(lastp, p - lastp);
+
+			q = rawrow.find(' ');
+			lastq = 0;
+			for (int i = 0; i < 8; i++) {
+				item = rawrow.substr(lastq, q - lastq);
+				eachrow.push_back(item);
+				lastq = q + 1;
+				q = rawrow.find(' ', lastq);
+			}
+			item = rawrow.substr(lastq);
+			eachrow.push_back(item);
+			filelist.push_back(eachrow);
+
+			lastp = p + 2;
+			p = fulllist.find("\r\n", lastp);
+		}
+		for (auto const& dir : filelist) {
+			for (auto const& temp : dir)
+				cout << temp << " ";
+			cout << endl;
+		}
+		closesocket(m_dataSocket);
+		recvControl(226);
+	}
+	catch (string error) {
+		throw error;
+	}
+	return 0;
 }
 
-void FTPClient::ls() {
-	listPwd();
+// --- cd: change working directory server side
+int FTPClient::cdUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: cd directory");
+	}
+	else {
+		string dir;
+		if (cmd.size() > 1) {
+			dir = cmd[1];
+		}
+		else {
+			cout << "Directory? ";
+			getline(cin, dir);
+		}
+		try {
+			cd(dir);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
 }
 
-void FTPClient::pwdDir() {
-	commandLine("PWD ");
-	recvControl(257);
+int FTPClient::cd(string dir) {
+	try {
+		memset(m_buff, 0, BUFFLEN);
+		commandLine("CWD " + dir);
+		recvControl(250);
+	}
+	catch (string error) {
+		throw error;
+	}
 }
+
+// --- pwd: show working directory server side
+int FTPClient::pwdUtil(const Command& cmd) {
+	if (cmd.size() > 1) {
+		throw "Invalid command. Usage: pwd";
+	}
+	else {
+		try {
+			pwd();
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+}
+
+void FTPClient::pwd() {
+	try {
+		commandLine("PWD ");
+		recvControl(257);
+	}
+	catch (string error) {
+		throw error;
+	}
+}
+
 /*
 -- This function to upload file to server
 -- Input: @param: the name of local file in server; 
@@ -347,35 +454,74 @@ void FTPClient::pwdDir() {
 -- Output: file stored in server directory
 -- Exemple: C:/Users/DELL/Downloads/FTP/test3.txt
 */
-void FTPClient::put() {
-	string localName;
-	cout << "Directory? ";
-	getline(cin, localName);
-	FILE *file = fopen(localName.c_str(), "rb");
-	if (!file) {
-		cout << "File not found! \n";
-		return;
+int FTPClient::putUtil(const Command& cmd) {
+	if (cmd.size() > 3) {
+		throw string("Invalid command. Usage: put directory name");
 	}
+	else {
+		string localName, localFileName;
+		if (cmd.size() == 1) {
+			cout << "Local file: ";
+			getline(cin, localName);
 
-	string localFileName;
-	// Find last "/"
-	int temp = localName.find_last_of("/");
-	// To get name of file that is sent to server
-	localFileName = localName.substr(temp + 1);
-	// Convert to passive mode
-	// convertPasv();
-	commandLine("STOR " + localFileName);
-	recvControl(150);
-	int count;
-	while (!feof(file)) {
-		count = fread(m_databuff, 1, DATABUFFLEN, file);
-		send(m_dataSocket, m_databuff, count, 0);
+			cout << "Remote file: ";
+			getline(cin, localFileName);
+		}
+		else if (cmd.size() == 2) {
+			localName = cmd[1];
+
+			cout << "Remote file: ";
+			getline(cin, localFileName);
+		}
+		else {
+			localName = cmd[1];
+			localFileName = cmd[2];
+		}
+
+		while (localName.find("\"") != -1) {
+			localName.erase(localName.begin() + localName.find("\""));
+		}
+
+		if (localFileName == "") {
+			int temp = max(int(localName.find_last_of("/")), int(localName.find_last_of("\\")));
+			localFileName = localName.substr(temp + 1);
+		}
+
+		try {
+			put(localName, localFileName);
+		}
+		catch (string error) {
+			throw error;
+		}
 	}
-	memset(m_databuff, 0, DATABUFFLEN);
-	send(m_dataSocket, m_databuff, 1, 0);
-	fclose(file);
-	closesocket(m_dataSocket);
-	recvControl(226);
+	return 0;
+}
+
+void FTPClient::put(string localName, string localFileName) {
+	try {
+		FILE *file = fopen(localName.c_str(), "rb");
+		if (!file) {
+			throw string("File not found!");
+		}
+
+		pasv();
+		commandLine("STOR " + localFileName);
+		recvControl(150);
+		int count;
+		while (!feof(file)) {
+			count = fread(m_databuff, 1, DATABUFFLEN, file);
+			send(m_dataSocket, m_databuff, count, 0);
+		}
+		memset(m_databuff, 0, DATABUFFLEN);
+		send(m_dataSocket, m_databuff, 1, 0);
+		fclose(file);
+		closesocket(m_dataSocket);
+		if (recvControl(226) == -1)
+			throw string("Error!");
+	}
+	catch (string error) {
+		throw error;
+	}
 }
 
 /*
@@ -385,19 +531,62 @@ void FTPClient::put() {
 -- Output: file stored in local dir
 -- Example: "\\test1.txt", "C:/Users/DELL/Downloads"
 */
-void FTPClient::get() {
-	string serverName; string localDir;
-	cout << "Directory? Server:  ";
-	getline(cin, serverName);
-	cout << "Local: "; getline(cin, localDir);
-	string localFilename = localDir + "/" + serverName;
-	ofstream openFile;
-	openFile.open(localFilename, ios_base::binary);
-	//convertPasv();
-	getFileSize(serverName);
-	commandLine("RETR " + serverName);
-	recvControl(150);
+int FTPClient::getUtil(const Command& cmd) {
+	if (cmd.size() > 3) {
+		throw string("Invalid command. Usage: put directory name");
+	}
+	else {
+		string localName, remoteName;
+		if (cmd.size() == 1) {
+			cout << "Remote file: ";
+			getline(cin, remoteName);
+
+			cout << "Local file: ";
+			getline(cin, localName);
+		}
+		else if (cmd.size() == 2) {
+			remoteName = cmd[1];
+
+			cout << "Local file: ";
+			getline(cin, localName);
+		}
+		else {
+			remoteName = cmd[1];
+			localName = cmd[2];
+		}
+		
+		if (remoteName == "") {
+			throw string("Invalid input.");
+		}
+
+		if (localName == "") {
+			localName = remoteName;
+		}
+		localName = string(_getcwd(NULL, 0)) + "\\" + localName;
+
+		try {
+			get(remoteName, localName);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+	return 0;
+}
+
+void FTPClient::get(string remoteName, string localName) {
+	try {
+		pasv();
+		getFileSize(remoteName);
+		commandLine("RETR " + remoteName);
+		recvControl(150);
+	}
+	catch (string error) {
+		throw error;
+	}
 	memset(m_databuff, 0, DATABUFFLEN);
+	ofstream openFile;
+	openFile.open(localName, ios_base::binary);
 	int ret = recv(m_dataSocket, m_databuff, DATABUFFLEN, 0);
 	while (ret > 0) {
 		openFile.write(m_databuff, ret);
@@ -412,65 +601,199 @@ void FTPClient::get() {
 -- @param: a directory to that file
 -- example: \\test1.txt
 */
-void FTPClient::deleteFile() {
-	string serverName;
-	cout << "Directory? ";
-	getline(cin, serverName);
-	commandLine("DELE " + serverName);
+int FTPClient::delUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: delete directory");
+	}
+	else {
+		string name;
+		if (cmd.size() > 1) {
+			name = cmd[1];
+		}
+		else {
+			cout << "Directory? ";
+			getline(cin, name);
+		}
+		try {
+			del(name);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+}
+
+void FTPClient::del(string dir) {
+	commandLine("DELE " + dir);
 	recvControl(250);
 }
 
-/*
--- This function to delete an empty folder on server
--- @param: the name of folder that is deleted on server
--- Example: Test
-*/
-void FTPClient::rmdir() {
-	string serverDir;
-	cout << "Directory? ";
-	getline(cin, serverDir);
-	commandLine("RMD " + serverDir);
+//-- This function to create an empty folder on server
+//-- @param: the name of folder that is created on server
+//-- Example: Test;
+int FTPClient::mkdirUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: mkdir directory");
+	}
+	else {
+		string name;
+		if (cmd.size() > 1) {
+			name = cmd[1];
+		}
+		else {
+			cout << "Directory? ";
+			getline(cin, name);
+		}
+		try {
+			mkdir(name);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+}
+
+void FTPClient::mkdir(string name) {
+	try {
+		commandLine("MKD " + name);
+		recvControl(250);
+	}
+	catch (string error) {
+		throw error;
+	}
+}
+
+//-- This function to delete an empty folder on server
+//-- @param: the name of folder that is deleted on server
+//-- Example: Test
+int FTPClient::rmdirUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: rmdir directory");
+	}
+	else {
+		string name;
+		if (cmd.size() > 1) {
+			name = cmd[1];
+		}
+		else {
+			cout << "Directory? ";
+			getline(cin, name);
+		}
+		try {
+			rmdir(name);
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+}
+
+void FTPClient::rmdir(string name) {
+	commandLine("RMD " + name);
 	recvControl(250);
 }
 
-/*
--- This function to create an empty folder on server
--- @param: the name of folder that is created on server
--- Example: Test;
-*/
-void FTPClient::mkdir() {
-	string serverNameFolder;
-	cout << "Directory? ";
-	getline(cin, serverNameFolder);
-	commandLine("MKD " + serverNameFolder);
-	recvControl(250);
+// -- This command sends Help menu
+// -- @param: command that the user need help with
+// -- Example: help / help ls
+int FTPClient::helpUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: help command");
+	}
+	else {
+		if (cmd.size() == 1) {
+			string h;
+			cout << "   ls \t put \t get \t cd \t delete \n   pwd \t pasv \t rmdir \t mkdir \t quit \n";
+			cout << "Choose the command you need help with: ";
+			getline(cin, h);
+			help(h);
+		}
+		else {
+			help(cmd[1]);
+		}
+	}
+	return 0;
 }
 
-void FTPClient::help() {
-	cout << setw(10) << left << "Command";
-	cout << setw(25) << left << "Description" << endl;
-	cout << setfill('-');
-	cout << setw(75) << '-' << endl;
-	cout << setfill(' ');
-	cout << setw(10) << left << "ls";
-	cout << setw(25) << left << "Returns information of a file or directory if specified." << endl;
-	cout << setw(10) << left << "put";
-	cout << setw(25) << left << "Upload a file to server." << endl;
-	cout << setw(10) << left << "get";
-	cout << setw(25) << left << "Download a file from server." << endl;
-	cout << setw(10) << left << "cd";
-	cout << setw(25) << left << "Change working directory." << endl;
-	cout << setw(10) << left << "delete";
-	cout << setw(25) << left << "Delete a file on server." << endl;
-	cout << setw(10) << left << "mkdir";
-	cout << setw(25) << left << "Create an empty folder on server." << endl;
-	cout << setw(10) << left << "rmdir";
-	cout << setw(25) << left << "Delete an empty folder on server." << endl;
-	cout << setw(10) << left << "pwd";
-	cout << setw(25) << left << "Print working directory. Returns the current directory of the host." << endl;
-	cout << setw(10) << left << "pasv";
-	cout << setw(25) << left << "Convert Passive Mode." << endl;
-	cout << setw(10) << left << "quit";
-	cout << setw(25) << left << "Disconnect." << endl;
+void FTPClient::help(string h) {
+	vector<string> helpLists = { "ls", "put", "get", "cd", "delete", "mkdir", "rmdir", "pwd", "pasv", "quit" };
+	vector<string> helpInfos = {
+		"Returns information of a file or directory if specified.",
+		"Upload a file to server.",
+		"Download a file from server.",
+		"Change working directory.",
+		"Delete a file on server.",
+		"Create an empty folder on server.",
+		"Delete an empty folder on server.",
+		"Print working directory. Returns the current directory of the host.",
+		"Convert Passive Mode.",
+		"Disconnect."
+	};
+
+	int pos = find(helpLists.begin(), helpLists.end(), h) - helpLists.begin();
+	if (pos >= helpLists.size()) {
+		cout << "No such command found." << endl;
+	}
+	else {
+		//cout << setw(10) << left << "Command";
+		//cout << setw(25) << left << "Description" << endl;
+		//cout << setfill('-');
+		//cout << setw(75) << '-' << endl;
+		//cout << setfill(' ');
+
+		cout << setw(10) << left << helpLists[pos];
+		cout << setw(25) << left << helpInfos[pos];
+		cout << endl;
+	}
 }
 
+
+// 
+int FTPClient::pasvUtil(const Command& cmd) {
+	if (cmd.size() > 1) {
+		throw "Invalid command. Usage: pasv";
+	}
+	else {
+		try {
+			pasv();
+		}
+		catch (string error) {
+			throw error;
+		}
+	}
+}
+
+int FTPClient::pasv() {
+	try {
+		int dataPort, ret;
+		// Chuyển sang PASSIVE
+		commandLine("PASV");
+		if (recvControl(227) == -1) {
+			throw string("Connecting In Passive Mode Failed: ") + to_string(GetLastError());
+		}
+		// 227 Entering Passive Mode (h1, h2, h3, h4, p1, p2)
+		// h1, h2, h3, h4 is host address (Ex: 127.0.0.1)
+		// p1 * 256 + p2 is data port
+		// so, value mode is (127, 0, 0, 1, p1, p2)
+		dataPort = getPort();
+
+		// Create a connection in passive mode	
+		m_dataSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (m_dataSocket == -1) {
+			throw string("Connecting In Passive Mode Failed: ") + to_string(GetLastError());
+		}
+		m_serverAddr.sin_port = htons(dataPort); // Change the port value in connection parameters
+		ret = connect(m_dataSocket, (sockaddr*)&m_serverAddr, sizeof(m_serverAddr));
+
+		if (ret == SOCKET_ERROR) {
+			throw string("Connecting In Passive Mode Failed: ") + to_string(GetLastError());
+			return -1;
+		}
+		cout << "Connecting In Passive Mode Succeeded." << endl;
+		m_passiveMode = true;
+	}
+	catch (string error) {
+		throw error;
+	}
+	return 0;
+}

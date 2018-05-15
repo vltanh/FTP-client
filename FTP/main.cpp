@@ -19,76 +19,65 @@ void main() {
 	bool isEndLoop = false;
 	
 	while (!isEndLoop) {
-		cout << "ftp> ";
-		getline(cin, type);
-		vector<string> cmd = getCommand(type);
+		try {
+			cout << "ftp> ";
+			getline(cin, type);
+			vector<string> cmd = getCommand(type);
 
-		if (cmd.size() == 0)
-			continue;
+			if (cmd.size() == 0)
+				continue;
 
-		if (cmd[0] == "open") {
-			if (cmd.size() > 2) {
-				cout << "Invalid command. Usage: open IP_address" << endl;
+			if (cmd[0] == "open") {
+				ftp.openUtil(cmd);
+			}
+			else if (cmd[0] == "user") {
+				ftp.userUtil(cmd);
+			}
+			else if (cmd[0] == "pass") {
+				ftp.passUtil(cmd);
+			}
+			else if (cmd[0] == "ls") {
+				ftp.lsUtil(cmd);
+			}
+			else if (cmd[0] == "cd") {
+				ftp.cdUtil(cmd);
+			}
+			else if (cmd[0] == "pwd") {
+				ftp.pwdUtil(cmd);
+			}
+			else if (cmd[0] == "mkdir") {
+				ftp.mkdirUtil(cmd);
+			}
+			else if (cmd[0] == "rmdir") {
+				ftp.rmdirUtil(cmd);
+			}
+			else if (cmd[0] == "delete") {
+				ftp.delUtil(cmd);
+			}
+			else if (cmd[0] == "pasv") {
+				ftp.pasv();
+			}
+			else if (cmd[0] == "put") {
+				ftp.putUtil(cmd);
+			}
+			else if (cmd[0] == "get") {
+				ftp.getUtil(cmd);
+			}
+			else if (cmd[0] == "help") {
+				ftp.helpUtil(cmd);
+			}
+			else if (cmd[0] == "quit") {
+				ftp.DisconnectServer();
+				isEndLoop = true;
 			}
 			else {
-				ftp.Login(cmd);
+				cout << "Invalid command." << endl;
 			}
 		}
-		else if (cmd[0] == "user") {
-			if (cmd.size() > 2) {
-				cout << "Usage: user username" << endl;
-			}
-			else {
-				string username = (cmd.size() == 2) ? cmd[1] : "";
-				ftp.user(username);
-			}
+		catch (string error) {
+			cout << error << endl;
 		}
-		else if (cmd[0] == "pass") {
-			if (cmd.size() > 2) {
-				cout << "Usage: pass password" << endl;
-			}
-			else {
-				string password = (cmd.size() == 2) ? cmd[1] : "";
-				ftp.pass(password);
-			}
-		}
-		else if (cmd[0] == "pasv") {
-			ftp.convertPasv();
-		}
-		else if (cmd[0] == "pwd") {
-			ftp.pwdDir();
-		}
-		else if (cmd[0] == "cd") {
-			ftp.cd();
-		}
-		else if (cmd[0] == "delete") {
-			ftp.deleteFile();
-		}
-		else if (cmd[0] == "mkdir") {
-			ftp.mkdir();
-		}
-		else if (cmd[0] == "rmdir") {
-			ftp.rmdir();
-		}
-		else if (cmd[0] == "ls") {
-			ftp.ls();
-		}
-		else if (cmd[0] == "put") {
-			ftp.put();
-		}
-		else if (cmd[0] == "get") {
-			ftp.get();
-		}
-		else if (cmd[0] == "help") {
-			ftp.help();
-		}
-		else if (cmd[0] == "quit") {
-			ftp.DisconnectServer();
-			isEndLoop = true;
-		}
-		else {
-			cout << "Invalid command." << endl;
-		}
+		catch (int e) {}
 	}
 	
 }

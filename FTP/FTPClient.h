@@ -12,12 +12,18 @@
 #include <vector>
 #include <iomanip>
 #include <conio.h>
+#include <stack>
+#include <direct.h>
+#include <stdlib.h>
+#include <stdio.h>
 using namespace std;
 
 const int PORT = 21;
 const int BUFFLEN = 1000;
 const int DATABUFFLEN = 1000;
 const char* const DELIMITER = "\r\n";
+
+typedef vector<string> Command;
 
 class FTPClient {
 private:
@@ -50,18 +56,35 @@ public:
 	~FTPClient();
 	int ConnectServer(int portConnect);
 	int DisconnectServer();
-	int Login(const vector<string>&);
+	int open(string);
 	int user(string);
 	int pass(string);
-	void ls(); // list the list of folder, file on server
-	void cd(); // change dir
-	int convertPasv();
-	void put(); // upload a file to server
-	void get(); // download a file from server
-	void deleteFile(); // delete a file on server
-	void rmdir(); // delete an empty folder on server
-	void mkdir(); // create an empty folder on server
-	void pwdDir();
-	void help();
+	int ls();
+	int cd(string); // change dir
+	int pasv();
+	void put(string, string); // upload a file to server
+	void get(string, string); // download a file from server
+	void del(string); // delete a file on server
+	void rmdir(string); // delete an empty folder on server
+	void mkdir(string); // create an empty folder on server
+	void pwd();
+	void help(string);
 	vector<vector<string>> filelist;
+
+	int openUtil(const Command&);
+	int userUtil(const Command&);
+	int passUtil(const Command&);
+	int lsUtil(const Command&);
+	int cdUtil(const Command&);
+	int pasvUtil(const Command&);
+	int putUtil(const Command&);
+	int getUtil(const Command&);
+	int delUtil(const Command&);
+	int rmdirUtil(const Command&);
+	int mkdirUtil(const Command&);
+	int pwdUtil(const Command&);
+	int helpUtil(const Command&);
 };
+
+//int FTPClient::putUtil(const Command&);
+//int FTPClient::getUtil(const Command&);
