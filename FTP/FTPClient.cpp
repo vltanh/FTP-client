@@ -507,7 +507,9 @@ void FTPClient::put(string localName, string localFileName) {
 			throw string("File not found!");
 		}
 
-		pasv();
+		if (m_passiveMode) pasv();
+		else actv();
+
 		commandLine("STOR " + localFileName);
 		recvControl(150);
 		int count;
@@ -582,7 +584,9 @@ int FTPClient::getUtil(const Command& cmd) {
 
 void FTPClient::get(string remoteName, string localName) {
 	try {
-		pasv();
+		if (m_passiveMode) pasv();
+		else actv();
+
 		getFileSize(remoteName);
 		commandLine("RETR " + remoteName);
 		recvControl(150);
@@ -846,7 +850,7 @@ int FTPClient::actv() {
 	unsigned char *port_char = (unsigned char*)&port;
 	try {
 		SOCKET listenSocket = listenServer(port);
-		commandLine("PORT " + to_string(ip_char[0]) + "," + to_string(ip_char[1]) + "," + to_string(ip_char[2]) + "," + to_string(ip_char[3]) + "," + to_string(port_char[1]) + "," + to_string(port_char[2]));
+		commandLine("PORT " + to_string(ip_char[0]) + "," + to_string(ip_char[1]) + "," + to_string(ip_char[2]) + "," + to_string(ip_char[3]) + "," + to_string(port_char[1]) + "," + to_string(port_char[0]));
 		if (recvControl(200) == -1) {
 			throw string("Connecting In Active Mode Failed: ") + to_string(GetLastError());
 		}
