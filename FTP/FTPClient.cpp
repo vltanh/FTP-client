@@ -1,5 +1,20 @@
 ﻿#include "FTPClient.h"
 
+FTPClient::FTPClient() {
+	m_IPAddr = m_Username = m_Password = "";
+	m_passiveMode = false;
+	// initializate socket
+	// Use version socket: 2.2
+	if (WSAStartup(MAKEWORD(2, 2), &startup) != 0) {
+		throw string("Init Failed: ") + to_string(GetLastError());
+		//system("pause");
+	}
+}
+
+FTPClient::~FTPClient() {
+	DisconnectServer();
+}
+
 /*
 -- Function: get state code from response information
 */
@@ -48,6 +63,9 @@ void FTPClient::getFileSize(string filename) {
 	}
 	catch (string error) {
 		throw error;
+	}
+	catch (int e) {
+		throw e;
 	}
 	char *temp = m_buff;
 	while (temp != nullptr && *temp != ' ')
@@ -125,25 +143,8 @@ void FTPClient::removeSpace(string &str) {
 	}
 }
 
-FTPClient::FTPClient() {
-	m_IPAddr, m_Username, m_Password = "";
-	m_passiveMode = false;
-}
-
-FTPClient::~FTPClient() {
-	DisconnectServer();
-}
-
 int FTPClient::ConnectServer(int portConnect) {
-	WSADATA startup;
 	int connection;
-	// initializate socket
-	// Use version socket: 2.2
-	if (WSAStartup(MAKEWORD(2, 2), &startup) != 0) {
-		throw string("Init Failed: ") + to_string(GetLastError());
-		//system("pause");
-		return -1;
-	}
 	// Create Socket
 	m_controlSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (m_controlSocket == INVALID_SOCKET) {
@@ -334,7 +335,9 @@ int FTPClient::lsUtil(const Command& cmd) {
 
 int FTPClient::ls() {
 	try {
-		pasv();
+		if (m_passiveMode) pasv();
+		else actv();
+
 		commandLine("LIST -al");
 		recvControl(150);
 		memset(m_databuff, 0, DATABUFFLEN);
@@ -570,6 +573,9 @@ int FTPClient::getUtil(const Command& cmd) {
 		catch (string error) {
 			throw error;
 		}
+		catch (int e) {
+			throw e;
+		}
 	}
 	return 0;
 }
@@ -584,6 +590,9 @@ void FTPClient::get(string remoteName, string localName) {
 	catch (string error) {
 		throw error;
 	}
+	catch (int e) {
+		throw e;
+	}
 	memset(m_databuff, 0, DATABUFFLEN);
 	ofstream openFile;
 	openFile.open(localName, ios_base::binary);
@@ -594,7 +603,12 @@ void FTPClient::get(string remoteName, string localName) {
 	}
 	openFile.close();
 	closesocket(m_dataSocket);
-	recvControl(226);
+	try {
+		recvControl(226);
+	}
+	catch (string e) {
+		throw e;
+	}
 }
 /*
 -- This function to delete a file on server
@@ -795,5 +809,58 @@ int FTPClient::pasv() {
 	catch (string error) {
 		throw error;
 	}
+	return 0;
+}
+
+int FTPClient::listenServer(unsigned short& port) {
+	SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (listenSocket == INVALID_SOCKET) {
+		throw string("Cannot create socket.");
+	}
+	SOCKADDR_IN clientSockAddr;
+	memset((void*)&clientSockAddr, 0, sizeof(clientSockAddr));
+	clientSockAddr.sin_family = AF_INET;
+	clientSockAddr.sin_addr.s_addr = INADDR_ANY;
+	clientSockAddr.sin_port = htons(0);
+	if (bind(listenSocket, (sockaddr*)&clientSockAddr, sizeof(clientSockAddr)) == SOCKET_ERROR) {
+		closesocket(listenSocket);
+		throw string("Cannot bind socket.");
+	}
+	if (listen(listenSocket, 1) == SOCKET_ERROR) {
+		closesocket(listenSocket);
+		throw string("Cannot listen.");
+	}
+	int len = sizeof(clientSockAddr);
+	getsockname(listenSocket, (sockaddr*)&clientSockAddr, &len);
+	port = ntohs(clientSockAddr.sin_port);
+	return listenSocket;
+}
+
+int FTPClient::actv() {
+	SOCKADDR_IN clientSockAddr;
+	int len = sizeof(clientSockAddr);
+	getsockname(m_controlSocket, (sockaddr*)&clientSockAddr, &len);
+	unsigned int ip = clientSockAddr.sin_addr.s_addr;
+	unsigned char *ip_char = (unsigned char*)&ip;
+	unsigned short port;
+	unsigned char *port_char = (unsigned char*)&port;
+	try {
+		SOCKET listenSocket = listenServer(port);
+		commandLine("PORT " + to_string(ip_char[0]) + "," + to_string(ip_char[1]) + "," + to_string(ip_char[2]) + "," + to_string(ip_char[3]) + "," + to_string(port_char[1]) + "," + to_string(port_char[2]));
+		if (recvControl(200) == -1) {
+			throw string("Connecting In Active Mode Failed: ") + to_string(GetLastError());
+		}
+		SOCKADDR_IN adr;
+		int len = sizeof(adr);
+		m_dataSocket = accept(listenSocket, (sockaddr*)&adr, &len);
+	}
+	catch (string error) {
+		throw error;
+	}
+	catch (int e) {
+
+	}
+	
+	m_passiveMode = false;
 	return 0;
 }

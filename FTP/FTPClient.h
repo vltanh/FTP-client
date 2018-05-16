@@ -15,7 +15,9 @@
 #include <stack>
 #include <direct.h>
 #include <stdlib.h>
+#include <cstdlib>
 #include <stdio.h>
+#include <fcntl.h>
 using namespace std;
 
 const int PORT = 21;
@@ -27,6 +29,7 @@ typedef vector<string> Command;
 
 class FTPClient {
 private:
+	WSADATA startup;
 	SOCKADDR_IN m_serverAddr;
 	string m_IPAddr;
 	string m_Username;
@@ -51,6 +54,7 @@ private:
 	int recvControl(int stateCode, string errorInfo = "");
 	int commandLine(std::string cmd);
 	void removeSpace(std::string&);
+	int listenServer(unsigned short&);
 public:
 	FTPClient();
 	~FTPClient();
@@ -62,6 +66,7 @@ public:
 	int ls();
 	int cd(string); // change dir
 	int pasv();
+	int actv();
 	void put(string, string); // upload a file to server
 	void get(string, string); // download a file from server
 	void del(string); // delete a file on server
