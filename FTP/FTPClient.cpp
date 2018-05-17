@@ -113,7 +113,7 @@ int FTPClient::recvControl(int stateCode, string errorInfo) {
 		if (code == stateCode)
 			return 0;
 		else {
-			if (code >= 500 && code <= 599)
+			if (code >= 500 && code <= 599 || code >= 400 && code <= 499)
 				throw - 1;
 			return -1;
 		}
@@ -515,7 +515,11 @@ void FTPClient::put(string localName, string localFileName) {
 		int count;
 		while (!feof(file)) {
 			count = fread(m_databuff, 1, DATABUFFLEN, file);
-			send(m_dataSocket, m_databuff, count, 0);
+			if (send(m_dataSocket, m_databuff, count, 0) == -1) {
+				fclose(file);
+				closesocket(m_dataSocket);
+				throw string("Connection lost!");
+			}
 		}
 		memset(m_databuff, 0, DATABUFFLEN);
 		send(m_dataSocket, m_databuff, 1, 0);
@@ -604,6 +608,14 @@ void FTPClient::get(string remoteName, string localName) {
 	while (ret > 0) {
 		openFile.write(m_databuff, ret);
 		ret = recv(m_dataSocket, m_databuff, DATABUFFLEN, 0);
+		if (string(m_databuff).find("\r\n226") >= 0) {
+			break;
+		}
+		else if (ret <= 0) {
+			openFile.close();
+			closesocket(m_dataSocket);
+			throw string("Connection lost!");
+		}
 	}
 	openFile.close();
 	closesocket(m_dataSocket);
@@ -808,7 +820,6 @@ int FTPClient::pasv() {
 			return -1;
 		}
 		cout << "Connecting In Passive Mode Succeeded." << endl;
-		m_passiveMode = true;
 	}
 	catch (string error) {
 		throw error;
@@ -865,6 +876,56 @@ int FTPClient::actv() {
 
 	}
 	
-	m_passiveMode = false;
 	return 0;
+}
+
+int FTPClient::lcdUtil(const Command& cmd) {
+	if (cmd.size() > 2) {
+		throw string("Invalid command. Usage: lcd new_client_directory");
+	}
+	else {
+		string newDir;
+		if (cmd.size() == 1) {
+			cout << "To ";
+			getline(cin, newDir);
+		}
+		else {
+			newDir = cmd[1];
+		}
+		if (newDir.back() != '/') newDir += '/';
+		lcd(newDir);
+	}
+	return 0;
+}
+
+int FTPClient::lcd(string newDir) {
+	if (_chdir(newDir.c_str()))
+	{
+		switch (errno)
+		{
+		case ENOENT:
+			cout << "Unable to locate the directory: " + newDir << endl;
+			break;
+		case EINVAL:
+			cout << "Invalid buffer.\n";
+			break;
+		default:
+			cout << "Unknown error.\n";
+		}
+		return -1;
+	}
+	
+	cout << "Successfully change directory to: " << _getcwd(NULL, BUFFLEN) << endl;
+	return 0;
+}
+
+int FTPClient::togglePassiveMode(const Command& cmd) {
+	if (cmd.size() > 1) {
+		throw string("Invalid command. Usage: pasv");
+	}
+	else {
+		m_passiveMode = 1 - m_passiveMode;
+		cout << "Passive mode: " << (m_passiveMode ? "TRUE" : "FALSE") << endl;
+		return m_passiveMode;
+	}
 }

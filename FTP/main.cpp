@@ -56,16 +56,16 @@ void main() {
 					ftp.delUtil(cmd);
 				}
 				else if (cmd[0] == "pasv") {
-					ftp.pasv();
-				}
-				else if (cmd[0] == "actv") {
-					ftp.actv();
+					ftp.togglePassiveMode(cmd);
 				}
 				else if (cmd[0] == "put") {
 					ftp.putUtil(cmd);
 				}
 				else if (cmd[0] == "get") {
 					ftp.getUtil(cmd);
+				}
+				else if (cmd[0] == "lcd") {
+					ftp.lcdUtil(cmd);
 				}
 				else if (cmd[0] == "help") {
 					ftp.helpUtil(cmd);

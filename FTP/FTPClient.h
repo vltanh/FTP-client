@@ -42,40 +42,40 @@ private:
 	string m_recvInfo;
 	string m_nextInfo;
 	bool m_passiveMode; // to check passive mode or not
-	bool m_connected; // check connected to server or not
-	bool m_login; // check login completed or not
-	string m_localDir = "/";
 	
 	int getStateCode();
 	int getPort();
 	void getFileSize(string filename);
-	int listPwd();
 	
 	int recvControl(int stateCode, string errorInfo = "");
 	int commandLine(std::string cmd);
 	void removeSpace(std::string&);
 	int listenServer(unsigned short&);
-public:
-	FTPClient();
-	~FTPClient();
-	int ConnectServer(int portConnect);
-	int DisconnectServer();
+
 	int open(string);
 	int user(string);
 	int pass(string);
 	int ls();
-	int cd(string); // change dir
+	int cd(string);
 	int pasv();
 	int actv();
-	void put(string, string); // upload a file to server
-	void get(string, string); // download a file from server
-	void del(string); // delete a file on server
-	void rmdir(string); // delete an empty folder on server
-	void mkdir(string); // create an empty folder on server
+	void put(string, string);
+	void get(string, string);
+	void del(string);
+	void rmdir(string);
+	void mkdir(string);
 	void pwd();
 	void help(string);
+	int lcd(string);
+
+	int ConnectServer(int portConnect);
+public:
+	FTPClient();
+	~FTPClient();
+	int DisconnectServer();
 	vector<vector<string>> filelist;
 
+	int togglePassiveMode(const Command&);
 	int openUtil(const Command&);
 	int userUtil(const Command&);
 	int passUtil(const Command&);
@@ -89,7 +89,5 @@ public:
 	int mkdirUtil(const Command&);
 	int pwdUtil(const Command&);
 	int helpUtil(const Command&);
+	int lcdUtil(const Command&);
 };
-
-//int FTPClient::putUtil(const Command&);
-//int FTPClient::getUtil(const Command&);
